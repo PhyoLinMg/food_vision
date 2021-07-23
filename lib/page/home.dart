@@ -79,10 +79,30 @@ class _HomeState extends State<Home> {
   Widget build(BuildContext context) {
     return Scaffold(
       body: Container(
-        child: ScreenHelper(
-          desktop: _buildUi(kDesktopMaxWidth),
-          mobile: _buildUi(getMobileMaxWidth(context)),
-          tablet: _buildUi(kTabletMaxWidth),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          mainAxisSize: MainAxisSize.max,
+          children: [
+            ScreenHelper.isDesktop(context)
+                ? Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    child: Text(
+                      "The tflite package doesn't support web for now.",
+                      style: TextStyle(
+                        color: Colors.red,
+                        fontSize: 30,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  )
+                : Container(),
+            ScreenHelper(
+              desktop: _buildUi(kDesktopMaxWidth),
+              mobile: _buildUi(getMobileMaxWidth(context)),
+              tablet: _buildUi(kTabletMaxWidth),
+            ),
+          ],
         ),
       ),
     );
