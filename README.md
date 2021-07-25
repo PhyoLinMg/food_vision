@@ -1,4 +1,4 @@
-# food_vision
+# Object Detection Model with Flutter
 
 A new Flutter project.
 
