@@ -17,23 +17,11 @@ class Home extends StatefulWidget {
 
 class _HomeState extends State<Home> {
   bool _loading = true;
-  File? _image = null;
+  File? _image;
   List? _output;
+  List? _recognitions;
+  double _imageWidth = 0, _imageHeight = 0;
   final picker = ImagePicker();
-
-  classifyImage(File? image) async {
-    var output = await Tflite.runModelOnImage(
-      path: image!.path,
-      numResults: 101,
-      threshold: 0.5,
-      imageMean: 127.5,
-      imageStd: 127.5,
-    );
-    setState(() {
-      _output = output;
-      _loading = false;
-    });
-  }
 
   loadModel() async {
     await Tflite.loadModel(
@@ -57,13 +45,36 @@ class _HomeState extends State<Home> {
     super.dispose();
   }
 
+  detectObject(File image) async {
+    var recognitions = await Tflite.detectObjectOnImage(
+        path: image.path, // required
+        model: "SSDMobileNet",
+        imageMean: 127.5,
+        imageStd: 127.5,
+        threshold: 0.4, // defaults to 0.1
+        numResultsPerClass: 10, // defaults to 5
+        asynch: true // defaults to true
+        );
+    FileImage(image)
+        .resolve(ImageConfiguration())
+        .addListener((ImageStreamListener((ImageInfo info, bool _) {
+          setState(() {
+            _imageWidth = info.image.width.toDouble();
+            _imageHeight = info.image.height.toDouble();
+          });
+        })));
+    setState(() {
+      _recognitions = recognitions;
+    });
+  }
+
   pickGalleryImage() async {
     var image = await picker.pickImage(source: ImageSource.gallery);
     if (image == null) return null;
     setState(() {
       _image = File(image.path);
     });
-    classifyImage(_image);
+    detectObject(_image!);
   }
 
   pickImage() async {
@@ -72,11 +83,67 @@ class _HomeState extends State<Home> {
     setState(() {
       _image = File(image.path);
     });
-    classifyImage(_image);
+    detectObject(_image!);
+  }
+
+  List<Widget> renderBoxes(Size screen) {
+    if (_recognitions == null) return [];
+    if (_imageWidth == null || _imageHeight == null) return [];
+
+    double factorX = screen.width;
+    double factorY = _imageHeight / _imageHeight * screen.width;
+
+    Color blue = Colors.blue;
+
+    return _recognitions!.map((re) {
+      return Container(
+        child: Positioned(
+            left: re["rect"]["x"] * factorX,
+            top: re["rect"]["y"] * factorY,
+            width: re["rect"]["w"] * factorX,
+            height: re["rect"]["h"] * factorY,
+            child: ((re["confidenceInClass"] > 0.50))
+                ? Container(
+                    decoration: BoxDecoration(
+                        border: Border.all(
+                      color: blue,
+                      width: 3,
+                    )),
+                    child: Text(
+                      "${re["detectedClass"]} ${(re["confidenceInClass"] * 100).toStringAsFixed(0)}%",
+                      style: TextStyle(
+                        background: Paint()..color = blue,
+                        color: Colors.white,
+                        fontSize: 15,
+                      ),
+                    ),
+                  )
+                : Container()),
+      );
+    }).toList();
   }
 
   @override
   Widget build(BuildContext context) {
+    Size size = MediaQuery.of(context).size;
+
+    List<Widget> stackChildren = [];
+
+    stackChildren.add(Positioned(
+      // using ternary operator
+      child: _image == null
+          ? Container(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: <Widget>[
+                  Text("Please Select an Image"),
+                ],
+              ),
+            )
+          : // if not null then
+          Container(child: Image.file(_image!)),
+    ));
+    stackChildren.addAll(renderBoxes(size));
     return Scaffold(
       body: Container(
         child: Column(
@@ -98,9 +165,9 @@ class _HomeState extends State<Home> {
                   )
                 : Container(),
             ScreenHelper(
-              desktop: _buildUi(kDesktopMaxWidth),
-              mobile: _buildUi(getMobileMaxWidth(context)),
-              tablet: _buildUi(kTabletMaxWidth),
+              desktop: _buildUi(kDesktopMaxWidth, stackChildren),
+              mobile: _buildUi(getMobileMaxWidth(context), stackChildren),
+              tablet: _buildUi(kTabletMaxWidth, stackChildren),
             ),
           ],
         ),
@@ -108,7 +175,7 @@ class _HomeState extends State<Home> {
     );
   }
 
-  Widget _buildUi(double width) {
+  Widget _buildUi(double width, List<Widget> stackChildren) {
     return Center(
       child: LayoutBuilder(
         builder: (BuildContext context, BoxConstraints constraints) {
@@ -136,19 +203,14 @@ class _HomeState extends State<Home> {
                     flex: ScreenHelper.isMobile(context) ? 0 : 2,
                     child: _image == null
                         ? Image.asset('assets/images/logo.jpg')
-                        : Image.file(_image!),
+                        : Stack(
+                            children: stackChildren,
+                          ),
                   ),
                   Expanded(
                     flex: ScreenHelper.isMobile(context) ? 0 : 4,
                     child: Column(
                       children: [
-                        Text(
-                          "Prediction: ramen",
-                          style: GoogleFonts.actor(
-                            color: Colors.black,
-                            fontSize: 30,
-                          ),
-                        ),
                         SizedBox(
                           height: 10,
                         ),
@@ -195,7 +257,4 @@ class _HomeState extends State<Home> {
       ),
     );
   }
-
-  //Create a button widget which will be used to trigger the camera.
-
 }
